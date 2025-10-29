@@ -1,261 +1,50 @@
 <!DOCTYPE html>
-<html lang="zh">
+<html lang="zh-CN">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>ROI 仪表盘（Supabase 版）</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
-<style>
-body { font-family:"Microsoft YaHei"; background:#1e1e2f; color:#eee; margin:0; padding:18px; transition: background 0.3s, color 0.3s;}
-h1 { text-align:center; margin-bottom:14px; font-size:20px;}
-.container { display:flex; flex-wrap:wrap; gap:18px; justify-content:space-between;}
-.box { background:#2a2a3f; border-radius:12px; padding:14px; flex:1 1 320px; box-shadow:0 6px 18px rgba(0,0,0,0.45);}
-input, button, select { border-radius:6px; padding:8px; margin:6px 0; border: none; box-sizing:border-box; }
-input[type="number"]{-moz-appearance:textfield;}
-.summary { display:flex; gap:12px; justify-content:space-around; flex-wrap:wrap; margin-top:8px;}
-.kpi { font-weight:700; }
-#dataTable { width:100%; border-collapse:collapse; margin-top:8px; color:#eee; }
-#dataTable th, #dataTable td { padding:8px; border-bottom:1px solid #444; text-align:center;}
-.tab { margin-bottom:12px; }
-.tab button { padding:8px 14px; margin-right:8px; border-radius:6px; border:none; background:#333; color:#fff; cursor:pointer;}
-.tab button.active { background:#007aff; }
-.theme-btn { position:fixed; right:14px; top:14px; padding:8px 10px; background:#007aff;color:#fff;border-radius:8px;border:none; z-index:200;}
-@media(max-width:768px){ .container{flex-direction:column;} }
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ROI 仪表盘（Supabase 多用户版）</title>
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-<h1>🔎 ROI 仪表盘（Supabase）</h1>
-<button class="theme-btn" onclick="toggleTheme()">切换主题</button>
-
-<div id="auth" class="box" style="max-width:420px;margin:0 auto 18px;">
-  <h3>登录（本地保存，供演示使用）</h3>
-  <input id="email" type="text" placeholder="用户名（任意）" />
-  <input id="password" type="password" placeholder="密码（任意）" />
-  <div>
-    <button onclick="login()" style="background:#007aff;color:#fff;">登录并记住</button>
-    <button onclick="clearSaved()" style="background:#ff3b30;color:#fff;">清除保存</button>
-  </div>
-  <p style="font-size:12px;color:#bbb;margin-top:8px;">（为简化演示，登录不使用后端验证，仅本地保存并进入仪表盘）</p>
-</div>
-
-<div id="main" style="display:none;">
-  <div class="tab">
-    <button class="tablinks active" onclick="openTab(event,'History')">历史记录</button>
-    <button class="tablinks" onclick="openTab(event,'Simulate')">投资模拟</button>
-  </div>
-
-  <div id="History" class="tabcontent" style="display:block;">
-    <div class="container">
-      <div class="box">
-        <h3>添加投资记录</h3>
-        <input id="project_name" type="text" placeholder="项目名称" />
-        <input id="cost" type="number" placeholder="成本 (¥)" />
-        <input id="revenue" type="number" placeholder="收益 (¥)" />
-        <div>
-          <button onclick="addRecord()" style="background:#00a86b;color:#fff;">添加</button>
-          <button onclick="exportExcel()" style="background:#ff9500;color:#fff;">导出 Excel</button>
-          <button onclick="sortByROI()" style="background:#ff6b6b;color:#fff;">按 ROI 排序</button>
-        </div>
-
-        <div class="summary" id="summary">
-          <div>总投资: <span id="totalCost" class="kpi">0</span></div>
-          <div>总收益: <span id="totalRevenue" class="kpi">0</span></div>
-          <div>平均ROI: <span id="avgROI" class="kpi">0%</span></div>
-          <div>总体ROI: <span id="overallROI" class="kpi">0%</span></div>
-        </div>
-        <div id="advice" style="text-align:center;margin-top:8px;color:#ffb86b;"></div>
-
-        <table id="dataTable">
-          <thead><tr><th>#</th><th>项目</th><th>成本</th><th>收益</th><th>ROI%</th><th>操作</th></tr></thead>
-          <tbody></tbody>
-        </table>
-      </div>
-
-      <div class="box">
-        <h3>可视化</h3>
-        <canvas id="barChart" style="max-height:260px;"></canvas>
-        <canvas id="roiChart" style="max-height:220px;"></canvas>
-        <canvas id="donutChart" style="max-width:260px;margin-top:10px;"></canvas>
-      </div>
+  <div class="login-container" id="login-container">
+    <h2>🔐 登录 ROI 仪表盘</h2>
+    <input type="email" id="email" placeholder="邮箱" />
+    <input type="password" id="password" placeholder="密码" />
+    <div class="btn-group">
+      <button id="login-btn">登录</button>
+      <button id="register-btn" class="secondary">注册新用户</button>
     </div>
+    <p id="login-msg"></p>
   </div>
 
-  <div id="Simulate" class="tabcontent" style="display:none;">
-    <div class="box" style="max-width:720px;margin:0 auto;">
-      <h3>投资模拟预测（单条）</h3>
-      <div class="simulate-box">
-        <input id="simCost" type="number" placeholder="模拟投资金额 (¥)" />
-        <button onclick="simulateROI()" style="background:#34c759;color:#fff;">模拟 ROI</button>
-      </div>
-      <div id="simResult" style="margin-top:10px;color:#9cf;"></div>
-      <canvas id="simBarChart" style="margin-top:10px;"></canvas>
-      <canvas id="simRoiChart" style="margin-top:10px;"></canvas>
+  <div class="dashboard" id="dashboard" style="display:none;">
+    <div class="topbar">
+      <h2>📊 ROI 仪表盘</h2>
+      <button id="logout-btn">登出</button>
     </div>
+
+    <div class="form-section">
+      <input type="text" id="project-name" placeholder="项目名称" />
+      <input type="number" id="cost" placeholder="投资金额" />
+      <input type="number" id="revenue" placeholder="收益金额" />
+      <button id="add-record">添加记录</button>
+    </div>
+
+    <div class="chart-section">
+      <canvas id="roiChart"></canvas>
+    </div>
+
+    <table id="data-table">
+      <thead>
+        <tr><th>项目</th><th>投资</th><th>收益</th><th>ROI%</th><th>时间</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
   </div>
-</div>
 
-<script>
-const API_BASE = "/api/records"; // relative; when deployed on Vercel works as https://<your>.vercel.app/api/records
-
-function toggleTheme(){
-  const body = document.body;
-  if(body.style.background === 'white'){
-    body.style.background='#1e1e2f'; body.style.color='#eee';
-    document.querySelectorAll('.box').forEach(b=>b.style.background='#2a2a3f');
-  } else {
-    body.style.background='white'; body.style.color='#111';
-    document.querySelectorAll('.box').forEach(b=>b.style.background='#fff');
-  }
-}
-
-function openTab(evt, name){
-  document.querySelectorAll('.tabcontent').forEach(tc=>tc.style.display='none');
-  document.getElementById(name).style.display='block';
-  document.querySelectorAll('.tablinks').forEach(btn=>btn.classList.remove('active'));
-  if(evt) evt.currentTarget.classList.add('active');
-}
-
-// ---------------- Login (local) ----------------
-function login(){
-  const email=document.getElementById('email').value;
-  const password=document.getElementById('password').value;
-  if(!email||!password){ alert('请输入用户名和密码'); return; }
-  localStorage.setItem('roi_user', JSON.stringify({email,password}));
-  document.getElementById('auth').style.display='none';
-  document.getElementById('main').style.display='block';
-  fetchRecords();
-}
-function clearSaved(){ localStorage.removeItem('roi_user'); alert('已清除保存'); }
-window.addEventListener('load', ()=>{
-  const saved = localStorage.getItem('roi_user');
-  if(saved){ const u=JSON.parse(saved); document.getElementById('email').value=u.email; document.getElementById('password').value=u.password; login(); }
-});
-
-// ---------------- CRUD ----------------
-let records = [];
-async function fetchRecords(){
-  try{
-    const res = await fetch(API_BASE);
-    if(!res.ok) throw new Error('网络或接口错误: '+res.status);
-    const data = await res.json();
-    records = data.map(r=>({...r, roi: (parseFloat(r.revenue)-parseFloat(r.cost))/parseFloat(r.cost)*100}));
-    renderTable();
-  }catch(e){ console.error(e); alert('获取记录失败：'+e.message); }
-}
-
-async function addRecord(){
-  const name=document.getElementById('project_name').value.trim();
-  const cost=parseFloat(document.getElementById('cost').value);
-  const revenue=parseFloat(document.getElementById('revenue').value);
-  if(!name || isNaN(cost) || isNaN(revenue)){ alert('请输入完整信息'); return; }
-  try{
-    const res = await fetch(API_BASE, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({project_name:name,cost,revenue})});
-    if(!res.ok) throw new Error('添加失败: '+res.status);
-    const data = await res.json();
-    records.push({...data, roi:(data.revenue-data.cost)/data.cost*100});
-    renderTable();
-    document.getElementById('project_name').value=''; document.getElementById('cost').value=''; document.getElementById('revenue').value='';
-  }catch(e){ console.error(e); alert('添加失败：'+e.message); }
-}
-
-async function deleteRecord(id){
-  if(!confirm('确认删除该记录？')) return;
-  try{
-    const res = await fetch(API_BASE + '?id=' + id, {method:'DELETE'});
-    if(!res.ok) throw new Error('删除失败: '+res.status);
-    records = records.filter(r=>r.id !== id);
-    renderTable();
-  }catch(e){ console.error(e); alert('删除失败：'+e.message); }
-}
-
-// ---------------- Render / Charts / Summary ----------------
-function renderTable(){
-  const tbody = document.querySelector('#dataTable tbody');
-  tbody.innerHTML = '';
-  let totalCost=0, totalRevenue=0;
-  records.forEach((r,i)=>{
-    totalCost += parseFloat(r.cost); totalRevenue += parseFloat(r.revenue);
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${i+1}</td><td>${r.project_name}</td><td>${r.cost}</td><td>${r.revenue}</td><td>${r.roi.toFixed(2)}</td><td><button onclick="deleteRecord(${r.id})" style="background:#ff3b30;color:#fff;border:none;padding:6px 8px;border-radius:6px;">删除</button></td>`;
-    tbody.appendChild(tr);
-  });
-  const avgROI = records.length ? records.reduce((s,r)=>s+r.roi,0)/records.length : 0;
-  const overallROI = totalCost ? ((totalRevenue - totalCost)/totalCost*100) : 0;
-  document.getElementById('totalCost').innerText = totalCost.toFixed(2);
-  document.getElementById('totalRevenue').innerText = totalRevenue.toFixed(2);
-  document.getElementById('avgROI').innerText = avgROI.toFixed(2) + '%';
-  document.getElementById('overallROI').innerText = overallROI.toFixed(2) + '%';
-  document.getElementById('advice').innerText = overallROI >= 20 ? '表现良好' : '谨慎操作';
-
-  drawCharts();
-}
-
-let barChart, roiChart, donutChart, simBarChart, simRoiChart;
-
-function drawCharts(){
-  const labels = records.map(r=>r.project_name);
-  const costs = records.map(r=>r.cost);
-  const revenues = records.map(r=>r.revenue);
-  const rois = records.map(r=>r.roi);
-
-  if(!barChart){
-    const ctx = document.getElementById('barChart').getContext('2d');
-    barChart = new Chart(ctx, { type:'bar', data:{ labels, datasets:[{label:'成本', data:costs},{label:'收益', data:revenues}] }, options:{responsive:true} });
-  } else {
-    barChart.data.labels = labels; barChart.data.datasets[0].data = costs; barChart.data.datasets[1].data = revenues; barChart.update();
-  }
-
-  if(!roiChart){
-    const ctx = document.getElementById('roiChart').getContext('2d');
-    roiChart = new Chart(ctx, { type:'line', data:{ labels, datasets:[{label:'ROI%', data:rois, borderColor:'#00ffff', fill:false}] }, options:{responsive:true} });
-  } else { roiChart.data.labels = labels; roiChart.data.datasets[0].data = rois; roiChart.update(); }
-
-  const totalCost = records.reduce((s,r)=>s+parseFloat(r.cost),0);
-  const totalRevenue = records.reduce((s,r)=>s+parseFloat(r.revenue),0);
-  const overallROI = totalCost ? ((totalRevenue-totalCost)/totalCost*100) : 0;
-
-  if(!donutChart){
-    const ctx = document.getElementById('donutChart').getContext('2d');
-    donutChart = new Chart(ctx, { type:'doughnut', data:{ labels:['ROI','剩余'], datasets:[{data:[overallROI, 100-overallROI}]} }, options:{responsive:true} });
-  } else { donutChart.data.datasets[0].data = [overallROI, 100-overallROI]; donutChart.update();}
-}
-
-// ---------------- Simulate ----------------
-function simulateROI(){
-  const simCost = parseFloat(document.getElementById('simCost').value);
-  if(isNaN(simCost)){ alert('请输入模拟金额'); return; }
-  const avgROI = records.length ? records.reduce((s,r)=>s+r.roi,0)/records.length : 10;
-  const simRevenue = simCost * (1 + avgROI/100);
-  const simROI = ( (simRevenue - simCost) / simCost * 100 ).toFixed(2);
-  document.getElementById('simResult').innerText = `预测收益 ¥${simRevenue.toFixed(2)}，预测 ROI ${simROI}%`;
-
-  const labels = records.map(r=>r.project_name).concat('模拟');
-  const costs = records.map(r=>r.cost).concat(simCost);
-  const revenues = records.map(r=>r.revenue).concat(simRevenue);
-  const rois = records.map(r=>r.roi).concat(parseFloat(simROI));
-
-  if(!simBarChart){
-    const ctx = document.getElementById('simBarChart').getContext('2d');
-    simBarChart = new Chart(ctx, { type:'bar', data:{ labels, datasets:[{label:'成本',data:costs},{label:'收益',data:revenues}] } });
-  } else { simBarChart.data.labels = labels; simBarChart.data.datasets[0].data = costs; simBarChart.data.datasets[1].data = revenues; simBarChart.update(); }
-
-  if(!simRoiChart){
-    const ctx = document.getElementById('simRoiChart').getContext('2d');
-    simRoiChart = new Chart(ctx, { type:'line', data:{ labels, datasets:[{label:'ROI%', data:rois, borderColor:'#00ffff', fill:false}] } });
-  } else { simRoiChart.data.labels = labels; simRoiChart.data.datasets[0].data = rois; simRoiChart.update();}
-}
-
-// ---------------- Excel export ----------------
-function exportExcel(){
-  const ws = XLSX.utils.json_to_sheet(records.map((r,i)=>({序号:i+1, 项目:r.project_name, 成本:r.cost, 收益:r.revenue, ROI:r.roi.toFixed(2)})));
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'ROI记录');
-  XLSX.writeFile(wb, 'roi_records.xlsx');
-}
-
-// ---------------- Utility ----------------
-function sortByROI(){ records.sort((a,b)=>b.roi-a.roi); renderTable(); }
-</script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
+  <script src="script.js"></script>
 </body>
 </html>
