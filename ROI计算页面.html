@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="zh">
+  <head>
+    <meta charset="UTF-8" />
+    <title>ROI 仪表盘</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+    <style>
+      body {
+        font-family: "Microsoft YaHei";
+        background: #1e1e2f;
+        color: #eee;
+        margin: 0;
+        padding: 20px;
+        transition: background 0.5s, color 0.5s;
+      }
+      h1 {
+        text-align: center;
+        margin-bottom: 20px;
+      }
+      .container {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-around;
+        gap: 20px;
+      }
+      .box {
+        background: #2a2a3f;
+        border-radius: 16px;
+        padding: 20px;
+        flex: 1 1 300px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+        transition: background 0.5s;
+      }
+      input,
+      button {
+        border-radius: 6px;
+        padding: 8px;
+        margin: 4px;
+        border: none;
+      }
+      input {
+        width: calc(100% - 20px);
+      }
+      button {
+        cursor: pointer;
+        transition: 0.3s;
+      }
+      button:hover {
+        opacity: 0.8;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 10px;
+        color: #eee;
+      }
+      th,
+      td {
+        padding: 8px;
+        text-align: center;
+        border-bottom: 1px solid #444;
+      }
+      th {
+        background: #333;
+      }
+      .summary {
+        display: flex;
+        justify-content: space-around;
+        font-size: 16px;
+        margin-bottom: 10px;
+      }
+      span.kpi {
+        font-weight: bold;
+        transition: color 0.3s, text-shadow 0.3s;
+      }
+      #advice {
+        text-align: center;
+        margin-top: 10px;
+        font-size: 16px;
+        font-weight: bold;
+        color: #ffa500;
+        transition: color 0.3s;
+      }
+      canvas {
+        margin-top: 20px;
+        background: #2a2a3f;
+        border-radius: 12px;
+        padding: 10px;
+      }
+      .theme-btn {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: #007aff;
+        color: #fff;
+        padding: 10px 14px;
+        border-radius: 8px;
+      }
+      .tab {
+        overflow: hidden;
+        border-bottom: 1px solid #444;
+        margin-bottom: 20px;
+      }
+      .tab button {
+        background: #333;
+        float: left;
+        border: none;
+        outline: none;
+        cursor: pointer;
+        padding: 10px 20px;
+        transition: 0.3s;
+        color: #eee;
+        border-radius: 6px 6px 0 0;
+        margin-right: 4px;
+      }
+      .tab button.active {
+        background: #007aff;
+        color: #fff;
+      }
+      .tabcontent {
+        display: none;
+        padding: 10px 0;
+      }
+      .simulate-box {
+        margin-top: 15px;
+        text-align: center;
+      }
+      .simulate-box input {
+        width: 150px;
+        margin-right: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>ROI 仪表盘</h1>
+    <button class="theme-btn" onclick="toggleTheme()">切换主题</button>
+
+    <div id="auth" class="box" style="max-width: 400px; margin: auto">
+      <h2>登录 / 注册</h2>
+      <input id="email" type="email" placeholder="邮箱" /><br />
+      <input id="password" type="password" placeholder="密码" /><br />
+      <button onclick="login()" style="background: #007aff; color: #fff">
+        登录
+      </button>
+      <button onclick="signup()" style="background: #34c759; color: #fff">
+        注册
+      </button>
+    </div>
+
+    <div id="main" style="display: none">
+      <div class="tab">
+        <button
+          class="tablinks"
+          onclick="openTab(event,'History')"
+          id="defaultTab"
+        >
+          历史记录
+        </button>
+        <button class="tablinks" onclick="openTab(event,'Simulate')">
+          投资模拟预测
+        </button>
+      </div>
+
+      <div id="History" class="tabcontent">
+        <div class="container">
+          <div class="box" style="flex: 1 1 400px">
+            <h2>添加投资记录</h2>
+            <input id="project_name" type="text" placeholder="项目名称" />
+            <input id="cost" type="number" placeholder="成本 (¥)" />
+            <input id="revenue" type="number" placeholder="收益 (¥)" />
+            <button
+              onclick="addRecord()"
+              style="background: #007aff; color: #fff"
+            >
+              添加
+            </button>
+            <button
+              onclick="exportExcel()"
+              style="background: #ffa500; color: #fff"
+            >
+              导出 Excel
+            </button>
+            <button
+              onclick="sortByROI()"
+              style="background: #ff9500; color: #fff"
+            >
+              按 ROI 排序
+            </button>
+
+            <div class="summary" id="summary">
+              <div>总投资: <span id="totalCost" class="kpi">0</span></div>
+              <div>总收益: <span id="totalRevenue" class="kpi">0</span></div>
+              <div>平均ROI: <span id="avgROI" class="kpi">0%</span></div>
+              <div>总体ROI: <span id="overallROI" class="kpi">0%</span></div>
+            </div>
+            <div id="advice">等待数据...</div>
+
+            <table id="dataTable">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>项目</th>
+                  <th>成本</th>
+                  <th>收益</th>
+                  <th>ROI%</th>
+                  <th>删除</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+            <button
+              onclick="logout()"
+              style="background: #ff3b30; color: #fff; margin-top: 10px"
+            >
+              退出登录
+            </button>
+          </div>
+
+          <div class="box" style="flex: 1 1 400px">
+            <h2>数据可视化</h2>
+            <canvas id="barChart"></canvas>
+            <canvas id="roiChart"></canvas>
+            <canvas
+              id="donutChart"
+              style="max-width: 300px; margin: auto"
+            ></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div id="Simulate" class="tabcontent">
+        <button onclick="toggleSimPanel()">展开/折叠模拟投资面板</button>
+        <div id="simPanel" style="display: none">
+          <div class="simulate-box">
+            <input id="simCost" type="number" placeholder="模拟投资金额 (¥)" />
+            <button
+              onclick="simulateROI()"
+              style="background: #34c759; color: #fff"
+            >
+              模拟 ROI
+            </button>
+            <div
+              id="simResult"
+              style="margin-top: 8px; font-weight: bold; color: #00ffff"
+            ></div>
+          </div>
+          <canvas id="simBarChart"></canvas>
+          <canvas id="simRoiChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // ---------------- Supabase 配置 ----------------
+      const SUPABASE_URL = "https://usfwozrysezkrtwornts.supabase.co";
+      const SUPABASE_ANON_KEY =
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVzZndvenJ5c2V6a3J0d29ybnRzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3MDE4NjgsImV4cCI6MjA3NzI3Nzg2OH0.IMya7TkqCLFffYY56B1Q_baLoPu3irn1i5rutnnFWDA";
+      const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+      let user = null,
+        records = [],
+        barChart,
+        roiChart,
+        donutChart,
+        simBarChart,
+        simRoiChart;
+      let darkTheme = true;
+
+      // ---------------- 主题切换 ----------------
+      function toggleTheme() {
+        darkTheme = !darkTheme;
+        if (darkTheme) {
+          document.body.style.background = "#1e1e2f";
+          document.body.style.color = "#eee";
+          document
+            .querySelectorAll(".box")
+            .forEach((b) => (b.style.background = "#2a2a3f"));
+        } else {
+          document.body.style.background = "#f5f5f5";
+          document.body.style.color = "#111";
+          document
+            .querySelectorAll(".box")
+            .forEach((b) => (b.style.background = "#fff"));
+        }
+        if (barChart) barChart.update();
+        if (roiChart) roiChart.update();
+        if (donutChart) donutChart.update();
+      }
+
+      // ---------------- Tab 控制 ----------------
+      function openTab(evt, tabName) {
+        document
+          .querySelectorAll(".tabcontent")
+          .forEach((tc) => (tc.style.display = "none"));
+        document
+          .querySelectorAll(".tablinks")
+          .forEach((tb) => tb.classList.remove("active"));
+        document.getElementById(tabName).style.display = "block";
+        evt.currentTarget.classList.add("active");
+      }
+      document.getElementById("defaultTab").click();
+      function toggleSimPanel() {
+        const panel = document.getElementById("simPanel");
+        panel.style.display = panel.style.display === "none" ? "block" : "none";
+      }
+
+      // ---------------- 登录注册 + 记住账号密码 ----------------
+      window.onload = function () {
+        const savedEmail = localStorage.getItem("roi_email");
+        const savedPass = localStorage.getItem("roi_pass");
+        if (savedEmail) document.getElementById("email").value = savedEmail;
+        if (savedPass) document.getElementById("password").value = savedPass;
+      };
+
+      async function login() {
+        const email = document.getElementById("email").value;
+        const password = document.getElementById("password").value;
+        if (!email || !password) {
+          alert("请输入账号密码");
+          return;
+        }
+        localStorage.setItem("roi_email", email);
+        localStorage.setItem("roi_pass", password);
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+        if (error) {
+          alert(error.message);
+          return;
+        }
+        user = data.user;
+        loadData();
+      }
+
+      async function signup() {
+        const email = document.getElementById("email").value;
+        const password = document.getElementById("password").value;
+        const { data, error } = await supabase.auth.signUp({ email, password });
+        if (error) {
+          alert(error.message);
+          return;
+        }
+        alert("注册成功，请登录");
+      }
+
+      async function logout() {
+        await supabase.auth.signOut();
+        user = null;
+        document.getElementById("main").style.display = "none";
+        document.getElementById("auth").style.display = "block";
+      }
+
+      // ---------------- 数据操作 ----------------
+      async function loadData() {
+        const { data, error } = await supabase
+          .from("roi_records")
+          .select("*")
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: true });
+        if (error) {
+          alert(error.message);
+          return;
+        }
+        records = data;
+        render();
+        document.getElementById("auth").style.display = "none";
+        document.getElementById("main").style.display = "block";
+      }
+
+      async function addRecord() {
+        const project_name = document.getElementById("project_name").value;
+        const cost = parseFloat(document.getElementById("cost").value);
+        const revenue = parseFloat(document.getElementById("revenue").value);
+        if (!project_name || !cost || !revenue) {
+          alert("请输入完整信息");
+          return;
+        }
+        const roi = ((revenue - cost) / cost) * 100;
+        await supabase
+          .from("roi_records")
+          .insert([{ user_id: user.id, project_name, cost, revenue, roi }]);
+        document.getElementById("project_name").value = "";
+        document.getElementById("cost").value = "";
+        document.getElementById("revenue").value = "";
+        loadData();
+      }
+
+      async function deleteRecord(id) {
+        await supabase.from("roi_records").delete().eq("id", id);
+        loadData();
+      }
+
+      // ---------------- KPI + 光晕滚动 ----------------
+      function animateValue(id, start, end, duration) {
+        const obj = document.getElementById(id);
+        let startTimestamp = null;
+        const step = (timestamp) => {
+          if (!startTimestamp) startTimestamp = timestamp;
+          const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+          const value = start + (end - start) * progress;
+          obj.innerText = value.toFixed(2) + (id.includes("ROI") ? "%" : "");
+          obj.style.color = roiGradientColor(value);
+          obj.style.textShadow = `0 0 ${5 + value / 10}px ${roiGradientColor(
+            value
+          )}`;
+          if (progress < 1) window.requestAnimationFrame(step);
+        };
+        window.requestAnimationFrame(step);
+      }
+
+      function roiGradientColor(value) {
+        if (value < 0) return "#ff3b30";
+        if (value <= 10) return "#ffa500";
+        return "#34c759";
+      }
+
+      function updateAdvice(overallROI) {
+        const adviceEl = document.getElementById("advice");
+        if (overallROI < 0)
+          adviceEl.innerText = "⚠️ 项目亏损，需优化成本或提高收益";
+        else if (overallROI <= 10)
+          adviceEl.innerText = "⚠️ 项目收益较低，可考虑优化投入";
+        else adviceEl.innerText = "✅ 项目表现优秀，可增加投资";
+      }
+
+      function updateSummary(totalCost, totalRevenue, avgROI, overallROI) {
+        animateValue("totalCost", 0, totalCost, 1000);
+        animateValue("totalRevenue", 0, totalRevenue, 1000);
+        animateValue("avgROI", 0, avgROI, 1000);
+        animateValue("overallROI", 0, overallROI, 1000);
+        updateAdvice(overallROI);
+      }
+
+      function sortByROI() {
+        records.sort((a, b) => b.roi - a.roi);
+        render();
+      }
+
+      // ---------------- 渲染表格 + 图表 ----------------
+      function render() {
+        const tbody = document.querySelector("#dataTable tbody");
+        tbody.innerHTML = records
+          .map(
+            (r, i) => `<tr>
+    <td>${i + 1}</td>
+    <td>${r.project_name}</td>
+    <td>${r.cost}</td>
+    <td>${r.revenue}</td>
+    <td style="color:${roiGradientColor(r.roi)};">${r.roi.toFixed(2)}</td>
+    <td><button onclick="deleteRecord('${
+      r.id
+    }')" style="background:#ff3b30;color:#fff;">删除</button></td>
+  </tr>`
+          )
+          .join("");
+
+        const totalCost = records.reduce((s, r) => s + r.cost, 0);
+        const totalRevenue = records.reduce((s, r) => s + r.revenue, 0);
+        const avgROI = records.length
+          ? records.reduce((s, r) => s + r.roi, 0) / records.length
+          : 0;
+        const overallROI = totalCost
+          ? ((totalRevenue - totalCost) / totalCost) * 100
+          : 0;
+        updateSummary(totalCost, totalRevenue, avgROI, overallROI);
+
+        const labels = records.map((r) => r.project_name);
+        const costs = records.map((r) => r.cost);
+        const revenues = records.map((r) => r.revenue);
+        const rois = records.map((r) => r.roi);
+
+        if (!barChart) {
+          const ctx = document.getElementById("barChart").getContext("2d");
+          barChart = new Chart(ctx, {
+            type: "bar",
+            data: {
+              labels,
+              datasets: [
+                {
+                  label: "成本",
+                  data: costs,
+                  backgroundColor: "rgba(255,99,132,0.5)",
+                  borderRadius: 6,
+                },
+                {
+                  label: "收益",
+                  data: revenues,
+                  backgroundColor: "rgba(54,162,235,0.5)",
+                  borderRadius: 6,
+                },
+              ],
+            },
+            options: {
+              responsive: true,
+              plugins: { legend: { position: "top" } },
+            },
+          });
+        } else {
+          barChart.data.labels = labels;
+          barChart.data.datasets[0].data = costs;
+          barChart.data.datasets[1].data = revenues;
+          barChart.update();
+        }
+
+        if (!roiChart) {
+          const ctx = document.getElementById("roiChart").getContext("2d");
+          roiChart = new Chart(ctx, {
+            type: "line",
+            data: {
+              labels,
+              datasets: [
+                {
+                  label: "ROI%",
+                  data: rois,
+                  borderColor: "#00ffff",
+                  fill: false,
+                  tension: 0.3,
+                  pointRadius: 6,
+                  pointBackgroundColor: "#00ffff",
+                },
+              ],
+            },
+            options: {
+              responsive: true,
+              plugins: { legend: { position: "top" } },
+            },
+          });
+        } else {
+          roiChart.data.labels = labels;
+          roiChart.data.datasets[0].data = rois;
+          roiChart.update();
+        }
+
+        if (!donutChart) {
+          const ctx = document.getElementById("donutChart").getContext("2d");
+          donutChart = new Chart(ctx, {
+            type: "doughnut",
+            data: {
+              labels: ["ROI", "剩余"],
+              datasets: [
+                {
+                  data: [overallROI, 100 - overallROI],
+                  backgroundColor: ["#00ffff", "#444"],
+                },
+              ],
+            },
+            options: {
+              responsive: true,
+              plugins: { legend: { position: "bottom" } },
+            },
+          });
+        } else {
+          donutChart.data.datasets[0].data = [overallROI, 100 - overallROI];
+          donutChart.update();
+        }
+      }
+
+      // ---------------- 投资模拟 ----------------
+      function simulateROI() {
+        const simCost = parseFloat(document.getElementById("simCost").value);
+        if (!simCost) {
+          alert("请输入模拟投资金额");
+          return;
+        }
+        const avgROI = records.length
+          ? records.reduce((s, r) => s + r.roi, 0) / records.length
+          : 10;
+        const simRevenue = simCost * (1 + avgROI / 100);
+        const simROI = (((simRevenue - simCost) / simCost) * 100).toFixed(2);
+        document.getElementById(
+          "simResult"
+        ).innerText = `预测收益: ¥${simRevenue.toFixed(2)}, ROI: ${simROI}%`;
+
+        const labels = records.map((r) => r.project_name).concat("模拟投资");
+        const costs = records.map((r) => r.cost).concat(simCost);
+        const revenues = records.map((r) => r.revenue).concat(simRevenue);
+        const rois = records.map((r) => r.roi).concat(parseFloat(simROI));
+
+        if (!simBarChart) {
+          const ctx = document.getElementById("simBarChart").getContext("2d");
+          simBarChart = new Chart(ctx, {
+            type: "bar",
+            data: {
+              labels,
+              datasets: [
+                {
+                  label: "成本",
+                  data: costs,
+                  backgroundColor: "rgba(255,165,0,0.5)",
+                  borderRadius: 6,
+                },
+                {
+                  label: "收益",
+                  data: revenues,
+                  backgroundColor: "rgba(0,255,255,0.5)",
+                  borderRadius: 6,
+                },
+              ],
+            },
+            options: {
+              responsive: true,
+              plugins: { legend: { position: "top" } },
+            },
+          });
+        } else {
+          simBarChart.data.labels = labels;
+          simBarChart.data.datasets[0].data = costs;
+          simBarChart.data.datasets[1].data = revenues;
+          simBarChart.update();
+        }
+
+        if (!simRoiChart) {
+          const ctx = document.getElementById("simRoiChart").getContext("2d");
+          simRoiChart = new Chart(ctx, {
+            type: "line",
+            data: {
+              labels,
+              datasets: [
+                {
+                  label: "ROI%",
+                  data: rois,
+                  borderColor: "#00ffff",
+                  fill: false,
+                  tension: 0.3,
+                  pointRadius: 6,
+                  pointBackgroundColor: "#00ffff",
+                },
+              ],
+            },
+            options: {
+              responsive: true,
+              plugins: { legend: { position: "top" } },
+            },
+          });
+        } else {
+          simRoiChart.data.labels = labels;
+          simRoiChart.data.datasets[0].data = rois;
+          simRoiChart.update();
+        }
+      }
+
+      // ---------------- Excel 导出 ----------------
+      function exportExcel() {
+        const ws = XLSX.utils.json_to_sheet(
+          records.map((r, i) => ({
+            序号: i + 1,
+            项目: r.project_name,
+            成本: r.cost,
+            收益: r.revenue,
+            ROI: r.roi.toFixed(2),
+          }))
+        );
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "ROI记录");
+        XLSX.writeFile(wb, "ROI数据.xlsx");
+      }
+    </script>
+  </body>
+</html>
