@@ -27,6 +27,25 @@ document.getElementById('register-btn').onclick = async () => {
   loginMsg.textContent = '✅ 注册成功，请验证邮箱后重新登录。';
 };
 
+const user = (await supabase.auth.getUser()).data.user;
+
+const { data, error } = await supabase
+  .from('roi_records')
+  .insert([
+    {
+      user_id: user.id,           // 当前登录用户 ID
+      project_name: '示例项目',
+      cost: 100,                  // 必填
+      revenue: 200,               // 必填
+      roi: (200 - 100) / 100,     // 可选
+      project_type: '测试类型',
+      notes: '自动插入测试',
+      created_at: new Date().toISOString()
+    }
+  ]);
+
+console.log(data, error);
+
 document.getElementById('logout-btn').onclick = async () => {
   await supabase.auth.signOut();
   localStorage.removeItem('sb_token');
